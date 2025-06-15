@@ -1,2 +1,2 @@
-# farsfea
-Tugas Akhir
+# farsea
+Aplikasi Absensi Otomatis Berbasis Face Recognition
