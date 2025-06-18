@@ -3,6 +3,8 @@ from ui.main_window import MainWindow
 from ui.admin_login import AdminLogin
 from ui.admin_dashboard import AdminDashboard
 from ui.admin_tampilkan_data_karyawan import AdminTampilkanDataKaryawan
+from ui.admin_laporan_absensi_karyawan import AdminLaporanAbsensiKaryawan
+
 
 
 class App(QWidget):
@@ -57,5 +59,13 @@ class App(QWidget):
         self.layout.setCurrentWidget(self.tampilkan_karyawan_page)
 
     def laporan_absensi(self):
-        print("Laporan absensi ditekan")
-        # Buat halaman laporan absensi jika sudah ada
+        self.laporan_absensi_page = AdminLaporanAbsensiKaryawan(
+            username=self.logged_in_username,
+            logout_callback=self.show_main_window,
+            menu_callbacks={
+                "tampilkan_data": self.tampilkan_data,
+                "laporan_absensi": self.laporan_absensi,
+            }
+        )
+        self.layout.addWidget(self.laporan_absensi_page)
+        self.layout.setCurrentWidget(self.laporan_absensi_page)
