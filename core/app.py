@@ -2,8 +2,7 @@ from PyQt5.QtWidgets import QWidget, QStackedLayout
 from ui.main_window import MainWindow
 from ui.admin_login import AdminLogin
 from ui.admin_dashboard import AdminDashboard
-from ui.admin_tambah_karyawan import AdminTambahKaryawan
-from ui.admin_hapus_karyawan import AdminHapusKaryawan
+from ui.admin_tampilkan_data_karyawan import AdminTampilkanDataKaryawan
 
 
 class App(QWidget):
@@ -38,48 +37,24 @@ class App(QWidget):
             username=username,
             logout_callback=self.show_main_window,
             menu_callbacks={
-                "tambah_data": self.tambah_data,
-                "hapus_data": self.hapus_data,
                 "tampilkan_data": self.tampilkan_data,
                 "laporan_absensi": self.laporan_absensi,
             }
         )
         self.layout.addWidget(self.admin_dashboard)
         self.layout.setCurrentWidget(self.admin_dashboard)
-
-    def tambah_data(self):
-        # Tampilkan halaman tambah karyawan
-        self.tambah_karyawan_page = AdminTambahKaryawan(
-            username=self.logged_in_username,
-            logout_callback=self.show_main_window,
-            menu_callbacks={
-                "tambah_data": self.tambah_data,
-                "hapus_data": self.hapus_data,
-                "tampilkan_data": self.tampilkan_data,
-                "laporan_absensi": self.laporan_absensi,
-            }
-        )
-        self.layout.addWidget(self.tambah_karyawan_page)
-        self.layout.setCurrentWidget(self.tambah_karyawan_page)
-
-    def hapus_data(self):
-        # Tampilkan halaman hapus karyawan
-        self.hapus_karyawan_page = AdminHapusKaryawan(
-            username=self.logged_in_username,
-            logout_callback=self.show_main_window,
-            menu_callbacks={
-                "tambah_data": self.tambah_data,
-                "hapus_data": self.hapus_data,
-                "tampilkan_data": self.tampilkan_data,
-                "laporan_absensi": self.laporan_absensi,
-            }
-        )
-        self.layout.addWidget(self.hapus_karyawan_page)
-        self.layout.setCurrentWidget(self.hapus_karyawan_page)
-
+        
     def tampilkan_data(self):
-        print("Tampilkan data karyawan ditekan")
-        # Buat halaman tampilkan data jika sudah ada
+        self.tampilkan_karyawan_page = AdminTampilkanDataKaryawan(
+            username=self.logged_in_username,
+            logout_callback=self.show_main_window,
+            menu_callbacks={
+                "tampilkan_data": self.tampilkan_data,
+                "laporan_absensi": self.laporan_absensi,
+            }
+        )
+        self.layout.addWidget(self.tampilkan_karyawan_page)
+        self.layout.setCurrentWidget(self.tampilkan_karyawan_page)
 
     def laporan_absensi(self):
         print("Laporan absensi ditekan")

@@ -34,16 +34,6 @@ class Navbar(QWidget):
         karyawan_title = QLabel("Data Karyawan")
         karyawan_title.setStyleSheet("font-weight: bold; margin-top: 10px;")
         layout.addWidget(karyawan_title)
-        
-        tambah_btn = QPushButton("• Tambah data")
-        tambah_btn.setStyleSheet("text-align: left; background: none; border: none; font-size: 12px; margin-left: 15px;")
-        tambah_btn.clicked.connect(lambda: self.menu_callbacks["tambah_data"]())
-        layout.addWidget(tambah_btn)
-
-        hapus_btn = QPushButton("• Hapus data")
-        hapus_btn.setStyleSheet("text-align: left; background: none; border: none; font-size: 12px; margin-left: 15px;")
-        hapus_btn.clicked.connect(lambda: self.menu_callbacks["hapus_data"]())
-        layout.addWidget(hapus_btn)
 
         tampil_btn = QPushButton("• Tampilkan data")
         tampil_btn.setStyleSheet("text-align: left; background: none; border: none; font-size: 12px; margin-left: 15px;")
