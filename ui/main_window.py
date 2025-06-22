@@ -1,15 +1,18 @@
 from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QVBoxLayout, QHBoxLayout, QFrame,
-    QFileDialog, QMessageBox, QSizePolicy, QSpacerItem
+    QFileDialog, QMessageBox
 )
-from PyQt5.QtCore import Qt, QTimer, QDateTime
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt, QTimer, QDateTime, pyqtSlot
+from PyQt5.QtGui import QPixmap, QImage
+from data.database import tambah_absensi, get_karyawan_by_nama
+import os
 
 class MainWindow(QWidget):
     def __init__(self, login_callback):
         super().__init__()
         self.login_callback = login_callback
         self.selected_file = None
+        self.realtime_thread = None
         self.init_ui()
 
     def init_ui(self):
@@ -46,11 +49,12 @@ class MainWindow(QWidget):
         page_title.setAlignment(Qt.AlignCenter)
         center_layout.addWidget(page_title)
 
-        # Placeholder kamera real time
-        box = QFrame()
-        box.setStyleSheet("background-color: #f0f0f0; border: 1px solid black;")
-        box.setFixedSize(600, 300)
-        center_layout.addWidget(box, alignment=Qt.AlignCenter)
+        # --- Kamera real-time ---
+        self.camera_label = QLabel("Memuat kamera...")
+        self.camera_label.setAlignment(Qt.AlignCenter)
+        self.camera_label.setFixedSize(600, 300)
+        self.camera_label.setStyleSheet("border: 1px solid #222; background: #fafafa;")
+        center_layout.addWidget(self.camera_label, alignment=Qt.AlignCenter)
 
         # Label waktu dinamis
         self.datetime_label = QLabel()
@@ -61,7 +65,7 @@ class MainWindow(QWidget):
         self.timer.timeout.connect(self.update_datetime_label)
         self.timer.start(1000)
 
-        # Baris file input dan tombol
+        # File input & test baris
         file_row = QHBoxLayout()
         file_row.setAlignment(Qt.AlignCenter)
         self.file_label = QLabel("Belum ada file dipilih")
@@ -78,10 +82,9 @@ class MainWindow(QWidget):
         file_row.addWidget(test_btn)
         center_layout.addLayout(file_row)
 
-        # Spacer kecil antara tombol dan hasil deteksi
         center_layout.addSpacing(10)
 
-        # === Preview hasil deteksi center ===
+        # Preview hasil deteksi file (bukan kamera)
         preview_row = QHBoxLayout()
         preview_row.setAlignment(Qt.AlignHCenter)
         self.result_img_label = QLabel()
@@ -92,17 +95,14 @@ class MainWindow(QWidget):
         preview_row.addWidget(self.result_img_label)
         center_layout.addLayout(preview_row)
 
-        # Tambahkan spacing kecil di bawah, bukan spacer expandable!
-        center_layout.addSpacing(20)  # Space kecil saja agar tidak nempel bawah
-
+        center_layout.addSpacing(20)
         main_layout.addLayout(center_layout)
-        # JANGAN tambahkan main_layout.addSpacerItem(QSpacerItem(..., QSizePolicy.Expanding)) di bawah
-
         self.setLayout(main_layout)
 
+        # --- Start kamera real-time thread (setelah layout) ---
+        QTimer.singleShot(300, self.start_realtime_detection)  # delay supaya label sudah siap
 
     def update_datetime_label(self):
-        # Format ke string lokal, misal: "Senin, 10 Juni 2025 - 13:40:01"
         hari_id = [
             "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"
         ]
@@ -128,7 +128,7 @@ class MainWindow(QWidget):
         )
         if file_name:
             self.selected_file = file_name
-            self.file_label.setText(file_name.split("/")[-1])
+            self.file_label.setText(os.path.basename(file_name))
             self.show_result_image(file_name)
             QMessageBox.information(self, "Berhasil", "File gambar berhasil dipilih!")
         else:
@@ -138,12 +138,6 @@ class MainWindow(QWidget):
             self.result_img_label.setText("Preview hasil deteksi di sini")
             QMessageBox.warning(self, "Gagal", "File gambar tidak dipilih!")
 
-    def test_absen_file(self):
-        if not self.selected_file:
-            QMessageBox.warning(self, "Gagal", "Silakan pilih file gambar terlebih dahulu!")
-        else:
-            QMessageBox.information(self, "Tes Absensi", f"Tes absensi dengan file '{self.selected_file.split('/')[-1]}' berhasil (dummy).")
-
     def show_result_image(self, file_path):
         pixmap = QPixmap(file_path)
         if not pixmap.isNull():
@@ -151,3 +145,91 @@ class MainWindow(QWidget):
             self.result_img_label.setPixmap(scaled)
         else:
             self.result_img_label.setText("Gagal load gambar.")
+
+    def start_realtime_detection(self):
+        try:
+            from realtime_face import FaceRecognitionThread, load_label_map
+            model_path = "farsfea25.keras"
+            label_map = load_label_map("labels.txt")
+            self.realtime_thread = FaceRecognitionThread(model_path, label_map)
+            self.realtime_thread.frame_updated.connect(self.update_camera_frame)
+            self.realtime_thread.start()
+        except Exception as e:
+            self.camera_label.setText(f"Error: {e}")
+
+    @pyqtSlot(QImage, list)
+    def update_camera_frame(self, qimg, face_infos):
+        # Tampilkan frame kamera
+        self.camera_label.setPixmap(QPixmap.fromImage(qimg))
+        # Absensi otomatis: Jika wajah tampil >=1 detik dan akurasi >=0.6, masukkan absensi (sekali)
+        for face in face_infos:
+            if face['detik'] >= 1.0 and face['akurat'] >= 0.6:
+                # Ambil NIK dari nama
+                row = get_karyawan_by_nama(face['nama'])
+                if row:
+                    nik = row['nik']
+                    # Untuk mencegah duplikasi absensi dalam 1 sesi, bisa tambahkan memori (set/flag) jika ingin
+                    tambah_absensi(nik, face['nama'], face['akurat'])
+                    # (Bisa kasih notifikasi sekali, jika ingin)
+
+    def test_absen_file(self):
+        if not self.selected_file:
+            QMessageBox.warning(self, "Gagal", "Silakan pilih file gambar terlebih dahulu!")
+            return
+
+        try:
+            from realtime_face import load_label_map
+            import cv2, numpy as np
+            from tensorflow.keras.models import load_model
+
+            model = load_model("farsfea25.keras")
+            label_map = load_label_map("labels.txt")
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+            img = cv2.imread(self.selected_file)
+            faces = face_cascade.detectMultiScale(img, scaleFactor=1.2, minNeighbors=5, minSize=(60, 60))
+            hasil = []
+            img_out = img.copy()
+            for i, (x, y, w, h) in enumerate(faces[:4]):
+                face_img = img[y:y+h, x:x+w]
+                face_resized = cv2.resize(face_img, (96, 96))
+                face_array = face_resized.astype("float32") / 255.0
+                face_array = np.expand_dims(face_array, axis=0)
+                pred = model.predict(face_array)[0]
+                pred_idx = np.argmax(pred)
+                pred_acc = float(pred[pred_idx])
+                nama = label_map.get(pred_idx, f"ID {pred_idx}")
+
+                if pred_acc >= 0.6:
+                    row = get_karyawan_by_nama(nama)
+                    if row:
+                        nik = row['nik']
+                        tambah_absensi(nik, nama, pred_acc)
+                    hasil.append(f"{nama} ({pred_acc:.2f})")
+                    # Gambar bounding box dan label
+                    cv2.rectangle(img_out, (x, y), (x+w, y+h), (0,255,0), 2)
+                    cv2.putText(img_out, f"{nama} | {pred_acc:.2f}", (x, y+h+24),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
+
+            # Tampilkan hasil ke preview
+            img_rgb = cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB)
+            h, w, ch = img_rgb.shape
+            bytes_per_line = ch * w
+            qimg = QImage(img_rgb.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(qimg)
+            scaled = pixmap.scaled(self.result_img_label.width(), self.result_img_label.height(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.result_img_label.setPixmap(scaled)
+
+            if hasil:
+                QMessageBox.information(self, "Tes Absensi", f"Terdeteksi: {', '.join(hasil)}")
+            else:
+                QMessageBox.warning(self, "Tes Absensi", "Tidak ada wajah karyawan terdeteksi dengan akurasi tinggi.")
+
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Terjadi error: {e}")
+
+    def closeEvent(self, event):
+        if self.realtime_thread:
+            self.realtime_thread.stop()
+            self.realtime_thread.wait()
+        event.accept()
