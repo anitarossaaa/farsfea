@@ -213,6 +213,7 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         table.setSpan(0, 8, 2, 1)      # "Jumlah Kehadiran" (baris 0 & 1, kolom 8)
 
         # Isi data absensi karyawan
+        today = datetime.date.today()
         for row_idx, nama in enumerate(page_nama):
             table.setItem(ROW_HEADER + row_idx, 0, QTableWidgetItem(nama))
             hadir_count = 0
@@ -220,14 +221,32 @@ class AdminLaporanAbsensiKaryawan(QWidget):
                 if not tgl:
                     table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
                     continue
+                cell_date = datetime.date(year, bln, tgl)
+                is_today = (cell_date == today)
+                is_future = (cell_date > today)
                 hadir = get_absensi_for_karyawan(nama, year, bln, tgl)
-                if hadir:
-                    item = QTableWidgetItem("OK")
-                    item.setBackground(QColor("#c8e6c9"))  # hijau muda
-                    table.setItem(ROW_HEADER + row_idx, j + 1, item)
-                    hadir_count += 1
+
+                # Hari besok/seterusnya: cell kosong
+                if is_future:
+                    table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
+                # Hari ini: hanya tulis OK jika hadir, kosong jika belum absen
+                elif is_today:
+                    if hadir:
+                        item = QTableWidgetItem("OK")
+                        item.setBackground(QColor("#c8e6c9"))  # hijau muda
+                        table.setItem(ROW_HEADER + row_idx, j + 1, item)
+                        hadir_count += 1
+                    else:
+                        table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
+                # Hari lalu: tulis OK atau NOK
                 else:
-                    table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem("NOK"))
+                    if hadir:
+                        item = QTableWidgetItem("OK")
+                        item.setBackground(QColor("#c8e6c9"))  # hijau muda
+                        table.setItem(ROW_HEADER + row_idx, j + 1, item)
+                        hadir_count += 1
+                    else:
+                        table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem("NOK"))
             table.setItem(ROW_HEADER + row_idx, 8, QTableWidgetItem(str(hadir_count)))
 
         # Pakai stretch agar memenuhi main_content
