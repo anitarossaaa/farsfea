@@ -2,6 +2,3 @@
 .pyd
 venv/
 __pycache__/
-core/__pycache__/
-data/__pycache__/
-ui/__pycache__/
