@@ -11,6 +11,10 @@ import sqlite3
 
 ROWS_PER_PAGE = 24
 
+# --- KONFIGURASI JAM MASUK & KELUAR (dapat diedit kapan saja) ---
+JAM_MASUK = 8      # Jam masuk (boleh integer/jam 24)
+JAM_KELUAR = 16    # Jam keluar maksimal (boleh integer/jam 24)
+
 def get_week_dates(week_num, month_num, year_num):
     """Mengembalikan list tuple (tanggal, bulan) untuk 7 hari pada minggu ke-X, dimulai Senin."""
     first_date = datetime.date(year_num, month_num, 1)
@@ -50,7 +54,7 @@ def get_absensi_for_karyawan(nama, year, month, tanggal):
     conn.close()
     for r in rows:
         jam = int(r[0][11:13])
-        if 8 <= jam < 16:
+        if JAM_MASUK <= jam < JAM_KELUAR:
             return True
     return False
 
@@ -231,13 +235,19 @@ class AdminLaporanAbsensiKaryawan(QWidget):
                     table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
                 # Hari ini: hanya tulis OK jika hadir, kosong jika belum absen
                 elif is_today:
+                    now = datetime.datetime.now()
+                    jam_sekarang = now.hour
                     if hadir:
                         item = QTableWidgetItem("OK")
-                        item.setBackground(QColor("#c8e6c9"))  # hijau muda
+                        item.setBackground(QColor("#c8e6c9"))
                         table.setItem(ROW_HEADER + row_idx, j + 1, item)
                         hadir_count += 1
                     else:
-                        table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
+                        # Tulis NOK hanya jika sudah lewat jam keluar maksimal
+                        if jam_sekarang >= JAM_KELUAR:
+                            table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem("NOK"))
+                        else:
+                            table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
                 # Hari lalu: tulis OK atau NOK
                 else:
                     if hadir:
