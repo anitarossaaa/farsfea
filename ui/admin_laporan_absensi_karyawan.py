@@ -1,34 +1,25 @@
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame,
-    QTableWidget, QTableWidgetItem, QAbstractItemView, QComboBox
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QComboBox, QHeaderView
 )
 from PyQt5.QtCore import Qt, QPoint
-from PyQt5.QtGui import QIcon, QPixmap, QPainter
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
 
 from ui.navbar import Navbar
 import datetime
+import sqlite3
 
-DUMMY_ABSEN = [
-    {
-        "nama": f"Nama {i+1}",
-        "minggu": ["OK" if j == 0 and i == 0 else ("NOK" if j == 1 and i == 0 else "") for j in range(7)],
-        "jumlah": 1 if i == 0 else 0
-    }
-    for i in range(35)
-]
-ROWS_PER_PAGE = 7
+ROWS_PER_PAGE = 24
 
 def get_week_dates(week_num, month_num, year_num):
+    """Mengembalikan list tuple (tanggal, bulan) untuk 7 hari pada minggu ke-X, dimulai Senin."""
     first_date = datetime.date(year_num, month_num, 1)
     first_monday = first_date + datetime.timedelta(days=(0 - first_date.weekday()) % 7)
     week_start = first_monday + datetime.timedelta(weeks=week_num - 1)
     dates = []
     for i in range(7):
         d = week_start + datetime.timedelta(days=i)
-        if d.month == month_num:
-            dates.append(d.day)
-        else:
-            dates.append("")
+        dates.append((d.day, d.month))
     return dates
 
 def get_week_of_month(date):
@@ -37,6 +28,32 @@ def get_week_of_month(date):
     week_num = ((date - first_monday).days // 7) + 1
     return max(week_num, 1)
 
+def get_karyawan_list():
+    db_path = "data/app_data.db"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT nama FROM karyawan ORDER BY nama")
+    rows = cur.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+def get_absensi_for_karyawan(nama, year, month, tanggal):
+    db_path = "data/app_data.db"
+    tanggal_str = f"{year:04d}-{month:02d}-{tanggal:02d}"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT waktu FROM absensi
+        WHERE nama=? AND DATE(waktu)=?
+    """, (nama, tanggal_str))
+    rows = cur.fetchall()
+    conn.close()
+    for r in rows:
+        jam = int(r[0][11:13])
+        if 8 <= jam < 16:
+            return True
+    return False
+
 class AdminLaporanAbsensiKaryawan(QWidget):
     def __init__(self, username, logout_callback, menu_callbacks, page=1):
         super().__init__()
@@ -44,7 +61,6 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         self.logout_callback = logout_callback
         self.menu_callbacks = menu_callbacks
         self.page = page
-        self.total_pages = ((len(DUMMY_ABSEN) - 1) // ROWS_PER_PAGE) + 1
 
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -89,7 +105,10 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         self.week_combo = QComboBox()
         self.week_combo.addItems(["Week"] + [f"Week {i+1}" for i in range(5)])
         self.month_combo = QComboBox()
-        self.month_combo.addItems(["Month"] + ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"])
+        self.month_combo.addItems(["Month"] + [
+            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ])
         self.year_combo = QComboBox()
         self.year_combo.addItems(["Year"] + [str(y) for y in range(2025, 2030)])
 
@@ -98,7 +117,6 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         default_year = today.year
         default_month = today.month
         default_week = get_week_of_month(today)
-        # Cek di list year, kalau belum ada (misal run 2024, list mulai 2025), fallback ke index 1 (2025)
         year_list = [int(self.year_combo.itemText(i)) for i in range(1, self.year_combo.count())]
         year_idx = year_list.index(default_year) + 1 if default_year in year_list else 1
         self.year_combo.setCurrentIndex(year_idx)
@@ -116,7 +134,7 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         self.year_combo.currentIndexChanged.connect(self.refresh_main_content)
 
         self.filter_layout = filter_layout
-        self.refresh_main_content()  # Panggil isi awal
+        self.refresh_main_content()
 
     def refresh_main_content(self):
         old_layout = self.main_content.layout()
@@ -155,23 +173,23 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         tanggal_header = get_week_dates(week, month, year)
         hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
 
-        # Data untuk halaman ini
+        # Ambil semua nama karyawan
+        all_nama = get_karyawan_list()
+        total_data = len(all_nama)
+        self.total_pages = ((total_data - 1) // ROWS_PER_PAGE) + 1
+        # Pagination
         start = (self.page - 1) * ROWS_PER_PAGE
-        end = min(start + ROWS_PER_PAGE, len(DUMMY_ABSEN))
-        page_data = DUMMY_ABSEN[start:end]
+        end = min(start + ROWS_PER_PAGE, total_data)
+        page_nama = all_nama[start:end]
 
         # --- TABEL HEADER BERTINGKAT ---
         ROW_HEADER = 2  # dua baris untuk header
         COL_COUNT = 9
 
-        table = QTableWidget(ROW_HEADER + len(page_data), COL_COUNT)
-        table.setFixedWidth(600)
-        table.setColumnWidth(0, 180)   # Nama
-        for i in range(1, 8):
-            table.setColumnWidth(i, 80)  # Kolom tanggal
-        table.setColumnWidth(8, 120)   # Jumlah Kehadiran
-        table.setFixedHeight(280)
-        
+        table = QTableWidget(ROW_HEADER + len(page_nama), COL_COUNT)
+        # Stretch semua kolom sesuai area yang tersedia
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        table.setSizeAdjustPolicy(QTableWidget.AdjustToContents)
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionMode(QAbstractItemView.NoSelection)
         table.horizontalHeader().setVisible(False)
@@ -180,10 +198,11 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         # Header baris pertama (angka tanggal)
         table.setItem(0, 0, QTableWidgetItem("Nama"))
         for i in range(7):
-            table.setItem(0, i + 1, QTableWidgetItem(str(tanggal_header[i]) if tanggal_header[i] else ""))
+            tgl, bln = tanggal_header[i]
+            table.setItem(0, i + 1, QTableWidgetItem(str(tgl)))
         table.setItem(0, 8, QTableWidgetItem("Jumlah Kehadiran"))
 
-        # Header baris kedua (hari)
+        # Header baris kedua (SELALU hari Senin-Minggu, konstan)
         table.setItem(1, 0, QTableWidgetItem(""))  # merge nanti
         for i in range(7):
             table.setItem(1, i + 1, QTableWidgetItem(hari[i]))
@@ -193,13 +212,25 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         table.setSpan(0, 0, 2, 1)      # "Nama" (baris 0 & 1, kolom 0)
         table.setSpan(0, 8, 2, 1)      # "Jumlah Kehadiran" (baris 0 & 1, kolom 8)
 
-        # Isi data
-        for row_idx, row in enumerate(page_data):
-            table.setItem(ROW_HEADER + row_idx, 0, QTableWidgetItem(row["nama"]))
-            for j in range(7):
-                table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(row["minggu"][j]))
-            table.setItem(ROW_HEADER + row_idx, 8, QTableWidgetItem(str(row["jumlah"])))
+        # Isi data absensi karyawan
+        for row_idx, nama in enumerate(page_nama):
+            table.setItem(ROW_HEADER + row_idx, 0, QTableWidgetItem(nama))
+            hadir_count = 0
+            for j, (tgl, bln) in enumerate(tanggal_header):
+                if not tgl:
+                    table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem(""))
+                    continue
+                hadir = get_absensi_for_karyawan(nama, year, bln, tgl)
+                if hadir:
+                    item = QTableWidgetItem("OK")
+                    item.setBackground(QColor("#c8e6c9"))  # hijau muda
+                    table.setItem(ROW_HEADER + row_idx, j + 1, item)
+                    hadir_count += 1
+                else:
+                    table.setItem(ROW_HEADER + row_idx, j + 1, QTableWidgetItem("NOK"))
+            table.setItem(ROW_HEADER + row_idx, 8, QTableWidgetItem(str(hadir_count)))
 
+        # Pakai stretch agar memenuhi main_content
         main_content_layout.addWidget(table, alignment=Qt.AlignHCenter)
 
         # Pagination
@@ -223,6 +254,7 @@ class AdminLaporanAbsensiKaryawan(QWidget):
         prev_btn.setEnabled(self.page > 1)
         next_btn.setEnabled(self.page < self.total_pages)
 
+        pagination_layout.addWidget(page_info)
         pagination_layout.addWidget(prev_btn)
         pagination_layout.addWidget(next_btn)
         main_content_layout.addLayout(pagination_layout)

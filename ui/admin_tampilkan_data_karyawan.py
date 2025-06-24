@@ -1,17 +1,14 @@
 from PyQt5.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame,
-    QTableWidget, QTableWidgetItem, QAbstractItemView
+    QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView
 )
 from PyQt5.QtCore import Qt, QPoint
 from PyQt5.QtGui import QIcon, QPixmap, QPainter
 
 from ui.navbar import Navbar
+from data.database import get_all_karyawan  # <--- Tambahkan ini
 
-DUMMY_KARYAWAN = [
-    {"nik": f"{1000 + i}", "nama": f"Nama Karyawan {i+1}"}
-    for i in range(40)
-]
-ROWS_PER_PAGE = 10
+ROWS_PER_PAGE = 24
 
 class AdminTampilkanDataKaryawan(QWidget):
     def __init__(self, username, logout_callback, menu_callbacks, page=1):
@@ -20,7 +17,10 @@ class AdminTampilkanDataKaryawan(QWidget):
         self.logout_callback = logout_callback
         self.menu_callbacks = menu_callbacks
         self.page = page
-        self.total_pages = ((len(DUMMY_KARYAWAN) - 1) // ROWS_PER_PAGE) + 1
+
+        # --- Ambil data karyawan dari database
+        self.karyawan_data = get_all_karyawan()
+        self.total_pages = ((len(self.karyawan_data) - 1) // ROWS_PER_PAGE) + 1
 
         # --- SETUP LAYOUT SEKALI ---
         self.layout = QVBoxLayout()
@@ -85,25 +85,29 @@ class AdminTampilkanDataKaryawan(QWidget):
         main_content_layout.addWidget(title_label)
         main_content_layout.addSpacing(10)
 
-        # Data untuk halaman ini
+        # Data untuk halaman ini (ambil dari self.karyawan_data)
         start = (self.page - 1) * ROWS_PER_PAGE
-        end = min(start + ROWS_PER_PAGE, len(DUMMY_KARYAWAN))
-        page_data = DUMMY_KARYAWAN[start:end]
+        end = min(start + ROWS_PER_PAGE, len(self.karyawan_data))
+        page_data = self.karyawan_data[start:end]
 
         table = QTableWidget(len(page_data), 3)
         table.setHorizontalHeaderLabels(["No.", "NIK", "Nama"])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionMode(QAbstractItemView.NoSelection)
-        table.setFixedWidth(600)
-        table.setFixedHeight(260)
-        table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
+
+        # Stretch kolom NIK dan Nama, kolom "No." fixed width
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        table.setColumnWidth(0, 60)  # <-- Kolom "No." fixed width 60px
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+
         for i, row in enumerate(page_data):
             table.setItem(i, 0, QTableWidgetItem(str(start + i + 1)))
-            table.setItem(i, 1, QTableWidgetItem(row["nik"]))
+            table.setItem(i, 1, QTableWidgetItem(str(row["nik"])))
             table.setItem(i, 2, QTableWidgetItem(row["nama"]))
 
-        main_content_layout.addWidget(table, alignment=Qt.AlignHCenter)
+        main_content_layout.addWidget(table)
 
         # Pagination
         pagination_layout = QHBoxLayout()
@@ -123,7 +127,6 @@ class AdminTampilkanDataKaryawan(QWidget):
         next_btn.setStyleSheet("background-color: #4285f4; border-radius: 16px;")
         next_btn.clicked.connect(self.next_page)
 
-        # Enable/disable tombol agar lebih user-friendly
         prev_btn.setEnabled(self.page > 1)
         next_btn.setEnabled(self.page < self.total_pages)
 

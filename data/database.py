@@ -1,6 +1,8 @@
 import sqlite3
 import hashlib
 import os
+import datetime
+import pytz
 
 DB_NAME = "data/app_data.db"
 
@@ -114,12 +116,15 @@ def create_absensi_table():
     conn.close()
 
 def tambah_absensi(nik, nama, akurasi):
-    conn = get_db_connection()
-    with conn:
-        conn.execute(
-            "INSERT INTO absensi (nik, nama, akurasi) VALUES (?, ?, ?)",
-            (nik, nama, akurasi)
-        )
+    tz = pytz.timezone("Asia/Jakarta")
+    waktu = datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO absensi (nik, nama, waktu, akurasi) VALUES (?, ?, ?, ?)",
+        (nik, nama, waktu, akurasi)
+    )
+    conn.commit()
     conn.close()
 
 def get_laporan_absensi():
