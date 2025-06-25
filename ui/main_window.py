@@ -7,12 +7,24 @@ from PyQt5.QtGui import QPixmap, QImage
 from data.database import tambah_absensi, get_karyawan_by_nama
 import os
 
+# ====== Ganti di sini kalau ingin ganti model atau label ======
+MODEL_PATH = "farsfea100_cnn_fromtuning.keras"
+LABELS_PATH = "labels.txt"
+# =============================================================
+
 class MainWindow(QWidget):
     def __init__(self, login_callback):
         super().__init__()
         self.login_callback = login_callback
         self.selected_file = None
         self.realtime_thread = None
+
+        # Load model dan label map hanya sekali saat inisialisasi
+        from tensorflow.keras.models import load_model
+        from realtime_face import load_label_map
+        self.model = load_model(MODEL_PATH)
+        self.label_map = load_label_map(LABELS_PATH)
+
         self.init_ui()
 
     def init_ui(self):
@@ -148,9 +160,9 @@ class MainWindow(QWidget):
 
     def start_realtime_detection(self):
         try:
-            from realtime_face import FaceRecognitionThread, load_label_map
-            model_path = "farsfea25.keras"
-            label_map = load_label_map("labels.txt")
+            from realtime_face import FaceRecognitionThread
+            model_path = MODEL_PATH
+            label_map = self.label_map
             self.realtime_thread = FaceRecognitionThread(model_path, label_map)
             self.realtime_thread.frame_updated.connect(self.update_camera_frame)
             self.realtime_thread.start()
@@ -178,12 +190,9 @@ class MainWindow(QWidget):
             return
 
         try:
-            from realtime_face import load_label_map
             import cv2, numpy as np
-            from tensorflow.keras.models import load_model
-
-            model = load_model("farsfea25.keras")
-            label_map = load_label_map("labels.txt")
+            model = self.model
+            label_map = self.label_map
             face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
             img = cv2.imread(self.selected_file)
